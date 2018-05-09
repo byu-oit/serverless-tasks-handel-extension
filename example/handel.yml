@@ -1,0 +1,13 @@
+version: 1
+
+name: serverless-task-example
+
+extensions:
+  tasks: serverless-tasks-handel-extension
+
+environments:
+  dev:
+    task:
+      type: tasks::scheduledtask
+      schedule: rate(1 minute)
+      image_name: dsw88/handel-scheduled-task-example
