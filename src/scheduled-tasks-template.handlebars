@@ -1,0 +1,199 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: IAM roles for GitHub Backup Application
+
+Resources:
+  #
+  # Configure IAM resources for ECS resources
+  #
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: {{resourceName}}-task-role
+      Path: "/services/"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+              - "ecs-tasks.amazonaws.com"
+            Action:
+            - "sts:AssumeRole"
+  TaskRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: {{resourceName}}-task-role
+      Roles:
+      - !Ref TaskRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        {{#each policyStatements}}
+        - Effect: {{Effect}}
+          Action:
+          {{#each Action}}
+          - '{{{this}}}'
+          {{/each}}
+          Resource:
+          {{#each Resource}}
+          - '{{{this}}}'
+          {{/each}}
+        {{/each}}
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "{{resourceName}}-task-execution-role"
+      Path: "/services/"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ecs-tasks.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  #
+  # Configure the role used by the Invoker Lambda
+  #
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "{{resourceName}}-invoker"
+      Path: "/services/"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+              - "lambda.amazonaws.com"
+            Action:
+            - "sts:AssumeRole"
+  LambdaPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "{{resourceName}}-invoker"
+      Roles:
+      - !Ref LambdaRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: Allow
+          Action:
+          - 'logs:CreateLogGroup'
+          - 'logs:CreateLogStream'
+          - 'logs:PutLogEvents'
+          Resource:
+          - 'arn:aws:logs:*:*:*'
+        - Effect: Allow
+          Action:
+          - ecs:DescribeTaskDefinition
+          - ecs:DescribeTasks
+          - ecs:ListTaskDefinitionFamilies
+          - ecs:ListTaskDefinitions
+          - ecs:ListTasks
+          Resource:
+          - '*'
+        - Effect: Allow
+          Action:
+          - ecs:RunTask
+          Resource:
+          - !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/{{resourceName}}*'
+#        - Effect: Allow
+#          Action:
+#          - iam:PassRole
+#          Resource:
+#          - !GetAtt TaskRole.Arn
+
+  #
+  # Event rule for scheuled invocation of Lambda.
+  #
+  EventsRule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: Schedule for daily GitHub org backup
+      ScheduleExpression: {{scheduleExpression}}
+      Name: !Sub "{{resourceName}}-schedule"
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt InvokerLambda.Arn
+        Id: "InvokerLambda"
+      
+  #
+  # Invoker Lambda function that starts the ECS Fargate task
+  # 
+  InvokerLambdaEventPermission: 
+    Type: "AWS::Lambda::Permission"
+    Properties: 
+      FunctionName: !Ref InvokerLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt EventsRule.Arn
+  InvokerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: {{s3ArtifactBucket}}
+        S3Key: {{s3ArtifactKey}}
+      Description: Lambda that starts up a scheduled ECS Fargate task
+      FunctionName: !Sub "{{resourceName}}-invoker"
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 30
+      Runtime: nodejs8.10
+      Role: !GetAtt LambdaRole.Arn
+      Tags:
+      {{#if tags}}
+      {{#each tags}}
+      - Key: {{@key}}
+        Value: {{this}}
+      {{/each}}
+      {{/if}}
+
+  #
+  # Configure Fargate Task Definition that runs on the cluster
+  #
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Cpu: {{taskCpu}}
+      Memory: {{taskMemory}}
+      Family: {{resourceName}}
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+      ContainerDefinitions:
+      - Name: scheduledtask
+        Image: {{imageName}}
+        Essential: true
+        Privileged: false
+        DisableNetworking: false
+        Environment:
+        {{#each environmentVariables}}
+        - Name: {{@key}}
+          Value: {{this}}
+        {{/each}}
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group: !Ref ContainerLogGroup
+            awslogs-region: !Ref "AWS::Region"
+            awslogs-stream-prefix: {{resourceName}}
+        MountPoints:
+        - ContainerPath: {{workingDirMountPath}}
+          SourceVolume: workingDir
+      Volumes:
+      - Name: workingDir
+  ContainerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "serverlesstasks/{{resourceName}}"
+      RetentionInDays: 30
