@@ -1,6 +1,6 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-Description: IAM roles for GitHub Backup Application
+Description: Handel-created serverless scheduled task
 
 Resources:
   #
@@ -93,11 +93,7 @@ Resources:
           - 'arn:aws:logs:*:*:*'
         - Effect: Allow
           Action:
-          - ecs:DescribeTaskDefinition
-          - ecs:DescribeTasks
-          - ecs:ListTaskDefinitionFamilies
-          - ecs:ListTaskDefinitions
-          - ecs:ListTasks
+          - ec2:describeSubnets
           Resource:
           - '*'
         - Effect: Allow
@@ -105,11 +101,12 @@ Resources:
           - ecs:RunTask
           Resource:
           - !Sub 'arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/{{resourceName}}*'
-#        - Effect: Allow
-#          Action:
-#          - iam:PassRole
-#          Resource:
-#          - !GetAtt TaskRole.Arn
+        - Effect: Allow
+          Action:
+          - iam:PassRole
+          Resource:
+          - !GetAtt TaskExecutionRole.Arn
+          - !GetAtt TaskRole.Arn
 
   #
   # Event rule for scheuled invocation of Lambda.
@@ -117,7 +114,7 @@ Resources:
   EventsRule:
     Type: 'AWS::Events::Rule'
     Properties:
-      Description: Schedule for daily GitHub org backup
+      Description: Handel-created event rule for serverless scheduled tasks
       ScheduleExpression: {{scheduleExpression}}
       Name: !Sub "{{resourceName}}-schedule"
       State: ENABLED
@@ -148,6 +145,11 @@ Resources:
       Timeout: 30
       Runtime: nodejs8.10
       Role: !GetAtt LambdaRole.Arn
+      Environment:
+        Variables:
+          FARGATE_SUBNET: {{subnetId}}
+          FARGATE_SECURITY_GROUP: {{securityGroupId}}
+          TASK_DEF_NAME: {{resourceName}}
       Tags:
       {{#if tags}}
       {{#each tags}}

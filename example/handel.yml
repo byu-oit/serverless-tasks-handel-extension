@@ -1,6 +1,6 @@
 version: 1
 
-name: serverless-task-example
+name: schedtask-example
 
 extensions:
   tasks: serverless-tasks-handel-extension

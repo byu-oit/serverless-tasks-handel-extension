@@ -22,13 +22,15 @@ import {
     ServiceContext,
     ServiceDeployer,
     Tags,
-    UnDeployContext
+    UnDeployContext,
+    UnPreDeployContext
 } from 'handel-extension-api';
 import { DeployContext } from 'handel-extension-api';
 import {
     deletePhases,
     deployPhase,
     handlebars,
+    preDeployPhase,
     tagging
 } from 'handel-extension-support';
 import { ScheduledTasksServiceConfig } from './config-types';
@@ -59,6 +61,10 @@ export class ScheduledTasksService implements ServiceDeployer {
         return errors;
     }
 
+    public async preDeploy(serviceContext: ServiceContext<ScheduledTasksServiceConfig>): Promise<PreDeployContext> {
+        return preDeployPhase.preDeployCreateSecurityGroup(serviceContext, null, SERVICE_NAME);
+    }
+
     public async deploy(ownServiceContext: ServiceContext<ScheduledTasksServiceConfig>, ownPreDeployContext: PreDeployContext, dependenciesDeployContexts: DeployContext[]): Promise<DeployContext> {
         const stackName = ownServiceContext.stackName();
         // tslint:disable-next-line:no-console
@@ -67,7 +73,7 @@ export class ScheduledTasksService implements ServiceDeployer {
         await ecsCalls.createDefaultClusterIfNotExists();
         const s3ArtifactInfo = await this.uploadInvokerLambdaCode(ownServiceContext);
         const stackTags = tagging.getTags(ownServiceContext);
-        const compiledTemplate = await this.getCompiledTemplate(stackName, ownServiceContext, dependenciesDeployContexts, s3ArtifactInfo, stackTags);
+        const compiledTemplate = await this.getCompiledTemplate(ownServiceContext.resourceName(), ownServiceContext, ownPreDeployContext, dependenciesDeployContexts, s3ArtifactInfo, stackTags);
         const deployedStack = await deployPhase.deployCloudFormationStack(stackName, compiledTemplate, [], true, SERVICE_NAME, 30, stackTags);
 
         // tslint:disable-next-line:no-console
@@ -79,17 +85,22 @@ export class ScheduledTasksService implements ServiceDeployer {
         return deletePhases.unDeployService(ownServiceContext, SERVICE_NAME);
     }
 
+    public unPreDeploy(ownServiceContext: ServiceContext<ScheduledTasksServiceConfig>): Promise<UnPreDeployContext> {
+        return deletePhases.unPreDeploySecurityGroup(ownServiceContext, SERVICE_NAME);
+    }
+
     private async uploadInvokerLambdaCode(serviceContext: ServiceContext<ScheduledTasksServiceConfig>): Promise<AWS.S3.ManagedUpload.SendData> {
         const s3FileName = `invoker-lambda.zip`;
         const pathToArtifact = `${__dirname}/invoker-lambda`;
         return deployPhase.uploadDeployableArtifactToHandelBucket(serviceContext, pathToArtifact, s3FileName);
     }
 
-    private async getCompiledTemplate(stackName: string, serviceContext: ServiceContext<ScheduledTasksServiceConfig>, dependenciesDeployContexts: DeployContext[], s3ArtifactInfo: AWS.S3.ManagedUpload.SendData, tags: Tags): Promise<string> {
+    private async getCompiledTemplate(resourceName: string, serviceContext: ServiceContext<ScheduledTasksServiceConfig>, preDeployContext: PreDeployContext, dependenciesDeployContexts: DeployContext[], s3ArtifactInfo: AWS.S3.ManagedUpload.SendData, tags: Tags): Promise<string> {
         const serviceParams = serviceContext.params;
+        const accountConfig = serviceContext.accountConfig;
 
         const handlebarsParams = {
-            resourceName: stackName,
+            resourceName,
             policyStatements: deployPhase.getAllPolicyStatementsForServiceRole(serviceContext, [], dependenciesDeployContexts, true),
             scheduleExpression: serviceParams.schedule,
             s3ArtifactBucket: s3ArtifactInfo.Bucket,
@@ -98,10 +109,12 @@ export class ScheduledTasksService implements ServiceDeployer {
             taskCpu: serviceParams.max_mb || 256,
             taskMemory: serviceParams.cpu_units || 512,
             imageName: this.getImageName(serviceContext),
+            subnetId: accountConfig.private_subnets[0],
+            securityGroupId: preDeployContext.securityGroups[0].GroupId,
             environmentVariables: deployPhase.getEnvVarsForDeployedService(serviceContext, dependenciesDeployContexts, serviceParams.environment_variables),
             workingDirMountPath: serviceParams.work_dir_path || '/mnt/share/task-workdir'
         };
-        return handlebars.compileTemplate(`${__dirname}/scheduled-tasks-template.handlebars`, handlebarsParams);
+        return handlebars.compileTemplate(`${__dirname}/scheduled-tasks-template.yml`, handlebarsParams);
     }
 
     private getImageName(ownServiceContext: ServiceContext<ScheduledTasksServiceConfig>): string {

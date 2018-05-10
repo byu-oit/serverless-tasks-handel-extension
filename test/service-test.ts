@@ -76,6 +76,9 @@ describe('sns service deployer', () => {
             const topicName = 'FakeTopic';
             const topicArn = 'FakeArn';
             const ownPreDeployContext = new PreDeployContext(serviceContext);
+            ownPreDeployContext.securityGroups.push({
+                GroupId: 'FakeId'
+            });
             const createClusterStub = sandbox.stub(ecsCalls, 'createDefaultClusterIfNotExists').resolves({});
             const deployStackStub = sandbox.stub(deployPhase, 'deployCloudFormationStack').resolves({});
             const uploadLambdaCodeStub = sandbox.stub(deployPhase, 'uploadDeployableArtifactToHandelBucket').resolves({
@@ -86,16 +89,6 @@ describe('sns service deployer', () => {
             const deployContext = await tasksDeployer.deploy(serviceContext, ownPreDeployContext, []);
             expect(deployStackStub.callCount).to.equal(1);
             expect(deployContext).to.be.instanceof(DeployContext);
-        });
-    });
-
-    describe('unDeploy', () => {
-        it('should undeploy the stack', async () => {
-            const unDeployStackStub = sandbox.stub(deletePhases, 'unDeployService').resolves(new UnDeployContext(serviceContext));
-
-            const unDeployContext = await tasksDeployer.unDeploy(serviceContext);
-            expect(unDeployContext).to.be.instanceof(UnDeployContext);
-            expect(unDeployStackStub.callCount).to.equal(1);
         });
     });
 });

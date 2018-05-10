@@ -51,7 +51,7 @@ export async function shouldAssignPublicIp(subnetId: string): Promise<boolean> {
 }
 
 export async function getVpcConfiguration(): Promise<AWS.ECS.AwsVpcConfiguration> {
-    const subnet = process.env.FARGATE_PRIVATE_SUBNET!;
+    const subnet = process.env.FARGATE_SUBNET!;
     const securityGroup = process.env.FARGATE_SECURITY_GROUP!;
     const assignPublicIp = await shouldAssignPublicIp(subnet);
     return {
@@ -66,12 +66,12 @@ export async function getVpcConfiguration(): Promise<AWS.ECS.AwsVpcConfiguration
  */
 export async function handler(event: any, context: any) {
     // tslint:disable-next-line:no-console
-    console.log('Starting Fargate backup task');
+    console.log('Starting scheduled Fargate task');
     try {
         // these are now defined inside the handler so the aws-sdk-mock will work correctly
         const ecs = new AWS.ECS({ apiVersion: '2014-11-13' });
         const runParams: AWS.ECS.RunTaskRequest = {
-            taskDefinition: '',
+            taskDefinition: process.env.TASK_DEF_NAME!,
             count: 1,
             launchType: 'FARGATE',
             networkConfiguration: {
