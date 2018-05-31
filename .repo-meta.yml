@@ -29,6 +29,8 @@ software:
       - TypeScript
       - HTML
       - JavaScript
+      - NodeJS
+      - Python
     standard_change_template:
     stages:
       development:
