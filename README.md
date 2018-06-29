@@ -26,6 +26,10 @@ environments:
       schedule: rate(1 minute) # Required. See https://docs.aws.amazon.com/AmazonCloudWatch/latest/events/ScheduledEvents.html for what to put here
       image_name: dsw88/handel-scheduled-task-example # Optional. The Docker image that should be executed as the task
       work_dir_path: '/mnt/share/workdir' # Optional. The directory where the task 8GB working directory should be mounted
+      max_mb: 2048 # Optional. Default: 512. The amount of memory in MB to allocate to the task
+      cpu_units: 1024 # Optional. Default: 256. The amount of CPU units to allocate to the task. 1 vCPU = 1024.
+      environment_variables: # Optional. Any environment variables that should be passed to the task
+        MY_ENV: myValue
 ```
 
 That's all the configuration you need to do! Once you deploy this app using Handel, your task will execute on the schedule you've defined.
