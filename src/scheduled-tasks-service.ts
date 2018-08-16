@@ -17,6 +17,7 @@
 import * as AWS from 'aws-sdk';
 import {
     AccountConfig,
+    DeployOutputType,
     PreDeployContext,
     ServiceConfig,
     ServiceContext,
@@ -41,12 +42,13 @@ const SERVICE_NAME = 'ServerlessTasks';
 export class ScheduledTasksService implements ServiceDeployer {
 
     public readonly consumedDeployOutputTypes = [
-        'environmentVariables',
-        'policies',
-        'securityGroups'
+        DeployOutputType.EnvironmentVariables,
+        DeployOutputType.Policies,
+        DeployOutputType.SecurityGroups
     ];
+    public readonly providedEventType = null;
     public readonly producedDeployOutputTypes = [];
-    public readonly producedEventsSupportedServices = [];
+    public readonly producedEventsSupportedTypes = [];
 
     public readonly supportsTagging = true;
 
@@ -74,7 +76,7 @@ export class ScheduledTasksService implements ServiceDeployer {
         const s3ArtifactInfo = await this.uploadInvokerLambdaCode(ownServiceContext);
         const stackTags = tagging.getTags(ownServiceContext);
         const compiledTemplate = await this.getCompiledTemplate(ownServiceContext.resourceName(), ownServiceContext, ownPreDeployContext, dependenciesDeployContexts, s3ArtifactInfo, stackTags);
-        const deployedStack = await deployPhase.deployCloudFormationStack(stackName, compiledTemplate, [], true, SERVICE_NAME, 30, stackTags);
+        const deployedStack = await deployPhase.deployCloudFormationStack(ownServiceContext, stackName, compiledTemplate, [], true, 30, stackTags);
 
         // tslint:disable-next-line:no-console
         console.log(`${SERVICE_NAME} - Finished Scheduled Tasks Service '${stackName}'`);

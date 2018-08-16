@@ -4,8 +4,11 @@
   "description": "Handel Extension that provides serverless scheduled tasks using ECS Fargate",
   "main": "dist/extension.js",
   "scripts": {
-    "build": "gulp build",
-    "test": "gulp build && mocha -r ts-node/register 'test/**/*.ts'"
+    "clean": "echo Cleaning && ./node_modules/.bin/del ./dist/ && echo Finished clean",
+    "compile": "echo Compiling && tsc && echo Finished compile",
+    "copyNonTsFiles": "./node_modules/.bin/cpy '**/*' '!**/*.ts' '../dist/' --cwd=src --parents",
+    "build": "npm run clean && npm run compile && npm run copyNonTsFiles",
+    "test": "npm run build && mocha -r ts-node/register 'test/**/*.ts'"
   },
   "engines": {
     "handel": "*"
@@ -14,8 +17,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "aws-sdk": "^2.188.0",
-    "handel-extension-api": "^0.26.8",
-    "handel-extension-support": "^0.26.8"
+    "handel-extension-api": "^0.31.1",
+    "handel-extension-support": "^0.31.1"
   },
   "devDependencies": {
     "@types/chai": "^4.1.2",
@@ -23,11 +26,9 @@
     "@types/node": "^9.6.4",
     "@types/sinon": "^4.3.1",
     "chai": "^4.1.2",
-    "fs-extra": "^5.0.0",
-    "gulp": "^3.9.1",
-    "gulp-typescript": "^3.2.3",
-    "merge-stream": "^1.0.1",
-    "run-sequence": "^2.2.0",
+    "cpy-cli": "^2.0.0",
+    "del-cli": "^1.1.0",
+    "make-dir-cli": "^1.0.0",
     "mocha": "^5.0.5",
     "sinon": "^4.5.0",
     "ts-node": "^5.0.1",
