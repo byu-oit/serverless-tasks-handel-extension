@@ -143,7 +143,7 @@ Resources:
       Handler: index.handler
       MemorySize: 128
       Timeout: 30
-      Runtime: nodejs8.10
+      Runtime: nodejs12.x
       Role: !GetAtt LambdaRole.Arn
       Environment:
         Variables:
