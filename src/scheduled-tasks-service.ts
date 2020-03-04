@@ -22,12 +22,14 @@ import {
     ServiceConfig,
     ServiceContext,
     ServiceDeployer,
+    ServiceEventType,
     Tags,
     UnDeployContext,
     UnPreDeployContext
 } from 'handel-extension-api';
 import { DeployContext } from 'handel-extension-api';
 import {
+    awsCalls,
     deletePhases,
     deployPhase,
     handlebars,
@@ -38,6 +40,43 @@ import { ScheduledTasksServiceConfig } from './config-types';
 import * as ecsCalls from './ecs-calls';
 
 const SERVICE_NAME = 'ServerlessTasks';
+
+function getDeployContext(serviceContext: ServiceContext<ScheduledTasksServiceConfig>, cfStack: AWS.CloudFormation.Stack): DeployContext {
+    const deployContext = new DeployContext(serviceContext);
+    const invokerLambdaArn = awsCalls.cloudFormation.getOutput('FunctionArn', cfStack);
+    const invokerLambdaName = awsCalls.cloudFormation.getOutput('FunctionName', cfStack);
+    if(!invokerLambdaArn || !invokerLambdaName) {
+        throw new Error('Expected to receive invoker lambda name and invoker lambda ARN from invoker lambda service');
+    }
+
+    // Output policy for consuming this Lambda
+    deployContext.policies.push({
+        'Effect': 'Allow',
+        'Action': [
+            'lambda:InvokeFunction',
+            'lambda:InvokeAsync'
+        ],
+        'Resource': [
+            invokerLambdaArn
+        ]
+    });
+
+    // Inject env vars
+    deployContext.addEnvironmentVariables({
+        FUNCTION_ARN: invokerLambdaArn,
+        FUNCTION_NAME: invokerLambdaName
+    });
+
+    // Inject event outputs
+    deployContext.eventOutputs = {
+        resourceArn: invokerLambdaArn,
+        resourceName: invokerLambdaName,
+        resourcePrincipal: 'lambda.amazonaws.com',
+        serviceEventType: ServiceEventType.Lambda
+    };
+
+    return deployContext;
+}
 
 export class ScheduledTasksService implements ServiceDeployer {
 
@@ -80,7 +119,7 @@ export class ScheduledTasksService implements ServiceDeployer {
 
         // tslint:disable-next-line:no-console
         console.log(`${SERVICE_NAME} - Finished Scheduled Tasks Service '${stackName}'`);
-        return new DeployContext(ownServiceContext);
+        return getDeployContext(ownServiceContext, deployedStack);
     }
 
     public unDeploy(ownServiceContext: ServiceContext<ScheduledTasksServiceConfig>): Promise<UnDeployContext> {

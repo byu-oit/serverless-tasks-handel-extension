@@ -199,3 +199,13 @@ Resources:
     Properties:
       LogGroupName: !Sub "serverlesstasks/{{resourceName}}"
       RetentionInDays: 30
+Outputs:
+  InvokerLambda:
+    Description: The name of the invoker lambda
+    Value: !Ref InvokerLambda
+  InvokerFunctionArn:
+    Description: The ARN of the invoker lambda
+    Value:
+      Fn::GetAtt:
+        - "InvokerLambda"
+        - "Arn"
