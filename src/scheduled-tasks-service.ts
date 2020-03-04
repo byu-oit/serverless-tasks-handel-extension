@@ -17,11 +17,14 @@
 import * as AWS from 'aws-sdk';
 import {
     AccountConfig,
+    ConsumeEventsContext,
     DeployOutputType,
     PreDeployContext,
+    ProduceEventsContext,
     ServiceConfig,
     ServiceContext,
     ServiceDeployer,
+    ServiceEventConsumer,
     ServiceEventType,
     Tags,
     UnDeployContext,
@@ -36,6 +39,8 @@ import {
     preDeployPhase,
     tagging
 } from 'handel-extension-support';
+import { v4 as uuid } from 'uuid';
+import awsWrapper from './aws-wrapper';
 import { ScheduledTasksServiceConfig } from './config-types';
 import * as ecsCalls from './ecs-calls';
 
@@ -76,6 +81,91 @@ function getDeployContext(serviceContext: ServiceContext<ScheduledTasksServiceCo
     };
 
     return deployContext;
+}
+
+function statementIsSame(functionName: string, principal: string, sourceArn: string | undefined, statement: any): boolean {
+    if (statement.Principal.Service !== principal) {
+        return false;
+    }
+
+    if (sourceArn && (!statement.Condition || !statement.Condition.ArnLike || statement.Condition.ArnLike['AWS:SourceArn'] !== sourceArn)) {
+        return false;
+    }
+    return true;
+}
+
+async function getLambdaPermission(functionName: string, principal: string, sourceArn: string | undefined): Promise<any> {
+    const getPolicyParams: AWS.Lambda.GetPolicyRequest = {
+        FunctionName: functionName
+    };
+
+    // tslint:disable-next-line:no-console
+    console.log(`Attempting to find permissions for ${principal} in function ${functionName}`);
+    try {
+        const getPolicyResponse = await awsWrapper.lambda.getPolicy(getPolicyParams);
+        const policy = JSON.parse(getPolicyResponse.Policy!);
+        for (const statement of policy.Statement) {
+            if (statementIsSame(functionName, principal, sourceArn, statement)) {
+                // tslint:disable-next-line:no-console
+                console.log(`Found permission ${principal} in function ${functionName}`);
+                return statement;
+            }
+        }
+        // tslint:disable-next-line:no-console
+        console.log(`Permission ${sourceArn} in function ${functionName} does not exist`);
+        return null;
+    }
+    catch (err) {
+        if (err.code === 'ResourceNotFoundException') {
+            // tslint:disable-next-line:no-console
+            console.log(`Permission ${sourceArn} in function ${functionName} does not exist`);
+            return null;
+        }
+        throw err; // Throw error on any other kind of error
+    }
+}
+
+async function addLambdaPermission(functionName: string, principal: string, sourceArn: string | undefined): Promise<any> {
+    const addPermissionParams: AWS.Lambda.AddPermissionRequest = {
+        Action: 'lambda:InvokeFunction',
+        FunctionName: functionName,
+        Principal: principal,
+        SourceArn: sourceArn,
+        StatementId: `${uuid()}`
+    };
+
+    // tslint:disable-next-line:no-console
+    console.log(`Adding Lambda permission to ${functionName}`);
+    const response = await awsWrapper.lambda.addPermission(addPermissionParams);
+    // tslint:disable-next-line:no-console
+    console.log(`Added Lambda permission to ${functionName}`);
+    return getLambdaPermission(functionName, principal, sourceArn);
+}
+
+async function addLambdaPermissionIfNotExists(functionName: string, principal: string, sourceArn: string): Promise<any> {
+    const permission = await getLambdaPermission(functionName, principal, sourceArn);
+    if (!permission) {
+        return addLambdaPermission(functionName, principal, sourceArn);
+    }
+    else {
+        return permission;
+    }
+}
+
+export async function addProducePermissions(ownServiceContext: ServiceContext<ScheduledTasksServiceConfig>, ownDeployContext: DeployContext, producerDeployContext: DeployContext) {
+    if(!ownDeployContext.eventOutputs || !producerDeployContext.eventOutputs) {
+        throw new Error(`Both the consumer and producer must return event outputs from their deploy`);
+    }
+
+    const functionName = ownDeployContext.eventOutputs.resourceName;
+    if(!functionName) {
+        throw new Error(`Expected to get function name for event binding`);
+    }
+    const principal = producerDeployContext.eventOutputs.resourcePrincipal;
+    const sourceArn = producerDeployContext.eventOutputs.resourceArn!;
+
+    // Add Lambda Permission If Not Exists
+    await addLambdaPermissionIfNotExists(functionName, principal, sourceArn);
 }
 
 export class ScheduledTasksService implements ServiceDeployer {
@@ -120,6 +210,18 @@ export class ScheduledTasksService implements ServiceDeployer {
         // tslint:disable-next-line:no-console
         console.log(`${SERVICE_NAME} - Finished Scheduled Tasks Service '${stackName}'`);
         return getDeployContext(ownServiceContext, deployedStack);
+    }
+
+    public async consumeEvents(ownServiceContext: ServiceContext<ScheduledTasksServiceConfig>, ownDeployContext: DeployContext, eventConsumerConfig: ServiceEventConsumer, producerServiceContext: ServiceContext<ServiceConfig>, producerDeployContext: DeployContext): Promise<ProduceEventsContext> {
+        // tslint:disable-next-line:no-console
+        console.log(`${SERVICE_NAME} - Consuming events from service '${producerServiceContext.serviceName}' for service '${ownServiceContext.serviceName}'`);
+        if(!producerDeployContext.eventOutputs) {
+            throw new Error(`${SERVICE_NAME} - The producer must return event outputs from their deploy`);
+        }
+        await addProducePermissions(ownServiceContext, ownDeployContext, producerDeployContext);
+        // tslint:disable-next-line:no-console
+        console.log(`${SERVICE_NAME} - Allowed consuming events from ${producerServiceContext.serviceName} for ${ownServiceContext.serviceName}`);
+        return new ConsumeEventsContext(ownServiceContext, producerServiceContext);
     }
 
     public unDeploy(ownServiceContext: ServiceContext<ScheduledTasksServiceConfig>): Promise<UnDeployContext> {

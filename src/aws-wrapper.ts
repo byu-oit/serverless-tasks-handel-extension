@@ -34,6 +34,16 @@ const awsWrapper = {
             const ecs = new AWS.ECS({ apiVersion: '2014-11-13' });
             return ecs.createCluster(params).promise();
         }
+    },
+    lambda: {
+        addPermission: (params: AWS.Lambda.AddPermissionRequest) => {
+            const lambda = new AWS.Lambda({ apiVersion: '2015-03-31' });
+            return lambda.addPermission(params).promise();
+        },
+        getPolicy: (params: AWS.Lambda.GetPolicyRequest) => {
+            const lambda = new AWS.Lambda({ apiVersion: '2015-03-31' });
+            return lambda.getPolicy(params).promise();
+        }
     }
 };
 
