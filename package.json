@@ -1,6 +1,6 @@
 {
   "name": "serverless-tasks-handel-extension",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Handel Extension that provides serverless scheduled tasks using ECS Fargate",
   "main": "dist/extension.js",
   "scripts": {
