@@ -175,8 +175,10 @@ export class ScheduledTasksService implements ServiceDeployer {
         DeployOutputType.Policies,
         DeployOutputType.SecurityGroups
     ];
-    public readonly providedEventType = null;
-    public readonly producedDeployOutputTypes = [];
+    public readonly providedEventType = ServiceEventType.Lambda;
+    public readonly producedDeployOutputTypes = [
+        DeployOutputType.Policies
+    ];
     public readonly producedEventsSupportedTypes = [];
 
     public readonly supportsTagging = true;
