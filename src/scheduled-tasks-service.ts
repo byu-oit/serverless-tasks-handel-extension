@@ -40,9 +40,13 @@ import {
     tagging
 } from 'handel-extension-support';
 import { v4 as uuid } from 'uuid';
+import * as winston from 'winston';
 import awsWrapper from './aws-wrapper';
 import { ScheduledTasksServiceConfig } from './config-types';
 import * as ecsCalls from './ecs-calls';
+
+// @ts-ignore
+winston.level = process.env.LOG_LEVEL || 'debug';
 
 const SERVICE_NAME = 'ServerlessTasks';
 
