@@ -84,7 +84,12 @@ describe('sns service deployer', () => {
                         GroupId: 'FakeId'
                     });
                     const createClusterStub = sandbox.stub(ecsCalls, 'createDefaultClusterIfNotExists').resolves({});
-                    const deployStackStub = sandbox.stub(deployPhase, 'deployCloudFormationStack').resolves({});
+                    const deployStackStub = sandbox.stub(deployPhase, 'deployCloudFormationStack').resolves({
+                        Outputs: [
+                            { OutputKey: 'FunctionArn', OutputValue: 'FakeInvokerArn' },
+                            { OutputKey: 'FunctionName', OutputValue: 'FakeInvokerName' }
+                        ]
+                    });
                     const uploadLambdaCodeStub = sandbox.stub(deployPhase, 'uploadDeployableArtifactToHandelBucket').resolves({
                         Bucket: 'FakeBucket',
                         Key: 'FakeKey'
