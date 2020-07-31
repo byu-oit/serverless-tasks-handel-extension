@@ -50,7 +50,7 @@ function getDeployContext(serviceContext: ServiceContext<ScheduledTasksServiceCo
     const deployContext = new DeployContext(serviceContext);
     const invokerLambdaArn = awsCalls.cloudFormation.getOutput('FunctionArn', cfStack);
     const invokerLambdaName = awsCalls.cloudFormation.getOutput('FunctionName', cfStack);
-    if(!invokerLambdaArn || !invokerLambdaName) {
+    if (!invokerLambdaArn || !invokerLambdaName) {
         throw new Error('Expected to receive invoker lambda name and invoker lambda ARN from invoker lambda service');
     }
 
@@ -153,12 +153,12 @@ async function addLambdaPermissionIfNotExists(functionName: string, principal: s
 }
 
 export async function addProducePermissions(ownServiceContext: ServiceContext<ScheduledTasksServiceConfig>, ownDeployContext: DeployContext, producerDeployContext: DeployContext) {
-    if(!ownDeployContext.eventOutputs || !producerDeployContext.eventOutputs) {
+    if (!ownDeployContext.eventOutputs || !producerDeployContext.eventOutputs) {
         throw new Error(`Both the consumer and producer must return event outputs from their deploy`);
     }
 
     const functionName = ownDeployContext.eventOutputs.resourceName;
-    if(!functionName) {
+    if (!functionName) {
         throw new Error(`Expected to get function name for event binding`);
     }
     const principal = producerDeployContext.eventOutputs.resourcePrincipal;
@@ -217,7 +217,7 @@ export class ScheduledTasksService implements ServiceDeployer {
     public async consumeEvents(ownServiceContext: ServiceContext<ScheduledTasksServiceConfig>, ownDeployContext: DeployContext, eventConsumerConfig: ServiceEventConsumer, producerServiceContext: ServiceContext<ServiceConfig>, producerDeployContext: DeployContext): Promise<ProduceEventsContext> {
         // tslint:disable-next-line:no-console
         console.log(`${SERVICE_NAME} - Consuming events from service '${producerServiceContext.serviceName}' for service '${ownServiceContext.serviceName}'`);
-        if(!producerDeployContext.eventOutputs) {
+        if (!producerDeployContext.eventOutputs) {
             throw new Error(`${SERVICE_NAME} - The producer must return event outputs from their deploy`);
         }
         await addProducePermissions(ownServiceContext, ownDeployContext, producerDeployContext);
@@ -257,8 +257,10 @@ export class ScheduledTasksService implements ServiceDeployer {
             subnetId: accountConfig.private_subnets[0],
             securityGroupId: preDeployContext.securityGroups[0].GroupId,
             environmentVariables: deployPhase.getEnvVarsForDeployedService(serviceContext, dependenciesDeployContexts, serviceParams.environment_variables),
-            workingDirMountPath: serviceParams.work_dir_path || '/mnt/share/task-workdir'
+            workingDirMountPath: serviceParams.work_dir_path || '/mnt/share/task-workdir',
+            permissionsBoundary: accountConfig.permissions_boundary || ''
         };
+
         return handlebars.compileTemplate(`${__dirname}/scheduled-tasks-template.yml`, handlebarsParams);
     }
 
